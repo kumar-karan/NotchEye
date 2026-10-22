@@ -1,6 +1,8 @@
 #import <AppKit/AppKit.h>
 #import "AppDelegate.h"
 
+static AppDelegate *sAppDelegate = nil;
+
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         if (argc > 1) {
@@ -31,8 +33,8 @@ int main(int argc, const char * argv[]) {
         NSApplication *app = [NSApplication sharedApplication];
         [app setActivationPolicy:NSApplicationActivationPolicyAccessory];
 
-        AppDelegate *delegate = [[AppDelegate alloc] init];
-        app.delegate = delegate;
+        sAppDelegate = [[AppDelegate alloc] init];
+        app.delegate = sAppDelegate;
 
         [app run];
     }
