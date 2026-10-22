@@ -52,28 +52,30 @@
 }
 
 - (void)setupSublayers {
-    // 1. Island Container (Pitch Black Bezel Extension)
+    // 1. Island Container (Pure OLED hardware black)
     _islandContainer = [CALayer layer];
-    _islandContainer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.98].CGColor;
-    _islandContainer.cornerRadius = 18.0; // 18pt continuous corner radius per CAD spec
+    _islandContainer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.99].CGColor;
+    _islandContainer.cornerRadius = 18.0;
     if (@available(macOS 10.15, *)) {
         _islandContainer.cornerCurve = kCACornerCurveContinuous;
     }
     _islandContainer.masksToBounds = YES;
     _islandContainer.opacity = 0.0;
-    _islandContainer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.10].CGColor;
+    _islandContainer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.09].CGColor;
     _islandContainer.borderWidth = 0.5;
     [self.layer addSublayer:_islandContainer];
 
-    // 2. Halo bottom border (Calibrated 1.5pt Outer Laser Rim)
+    // 2. Halo bottom border (1.5pt Laser Rim matching Blueprint)
     _haloBorderLayer = [CAShapeLayer layer];
     _haloBorderLayer.fillColor = [NSColor clearColor].CGColor;
     _haloBorderLayer.strokeColor = [self accentColor].CGColor;
     _haloBorderLayer.lineWidth = 1.5;
+    _haloBorderLayer.lineCap = kCALineCapRound;
+    _haloBorderLayer.lineJoin = kCALineJoinRound;
     _haloBorderLayer.opacity = 0.0;
     _haloBorderLayer.shadowColor = [self accentColor].CGColor;
     _haloBorderLayer.shadowRadius = 8.0;
-    _haloBorderLayer.shadowOpacity = 0.65;
+    _haloBorderLayer.shadowOpacity = 0.75;
     _haloBorderLayer.shadowOffset = CGSizeMake(0, -2);
     [self.layer addSublayer:_haloBorderLayer];
 
@@ -98,16 +100,10 @@
     // 5. Camera SF Symbol Icon
     _iconLayer = [CALayer layer];
     _iconLayer.contentsGravity = kCAGravityResizeAspect;
-    if (@available(macOS 11.0, *)) {
-        NSImage *camImg = [NSImage imageWithSystemSymbolName:@"video.fill" accessibilityDescription:nil];
-        if (camImg) {
-            NSImage *tinted = [self tintImage:camImg withColor:[self accentColor]];
-            _iconLayer.contents = tinted;
-        }
-    }
+    [self updateIconImage];
     [_islandContainer addSublayer:_iconLayer];
 
-    // 6. Title Text: "Camera Active"
+    // 6. Title Text: "Camera Active" / "Citrix HDX Pipe"
     _titleLayer = [CATextLayer layer];
     _titleLayer.string = @"Camera Active";
     _titleLayer.font = (__bridge CFTypeRef)[NSFont systemFontOfSize:12.0 weight:NSFontWeightSemibold];
@@ -117,20 +113,20 @@
     _titleLayer.alignmentMode = kCAAlignmentLeft;
     [_islandContainer addSublayer:_titleLayer];
 
-    // 7. Subtitle Text: "Citrix HDX Pipe • corp-gateway"
+    // 7. Subtitle Text: "Citrix Viewer • corp-gateway.internal"
     _subtitleLayer = [CATextLayer layer];
-    _subtitleLayer.string = @"Citrix HDX Pipe";
-    _subtitleLayer.font = (__bridge CFTypeRef)[NSFont monospacedSystemFontOfSize:10.0 weight:NSFontWeightMedium];
-    _subtitleLayer.fontSize = 10.0;
-    _subtitleLayer.foregroundColor = [NSColor colorWithWhite:0.65 alpha:1.0].CGColor;
+    _subtitleLayer.string = @"Citrix Viewer • Session Active";
+    _subtitleLayer.font = (__bridge CFTypeRef)[NSFont monospacedSystemFontOfSize:9.5 weight:NSFontWeightMedium];
+    _subtitleLayer.fontSize = 9.5;
+    _subtitleLayer.foregroundColor = [NSColor colorWithWhite:0.62 alpha:1.0].CGColor;
     _subtitleLayer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
     _subtitleLayer.alignmentMode = kCAAlignmentLeft;
     [_islandContainer addSublayer:_subtitleLayer];
 
-    // 8. Live Badge Container + Text (High-contrast technical pill)
+    // 8. Badge Container + Text (High-contrast technical pill)
     _liveBadgeLayer = [CALayer layer];
     _liveBadgeLayer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.18].CGColor;
-    _liveBadgeLayer.cornerRadius = 4.5;
+    _liveBadgeLayer.cornerRadius = 5.0;
     _liveBadgeLayer.borderColor = [[self accentColor] colorWithAlphaComponent:0.45].CGColor;
     _liveBadgeLayer.borderWidth = 0.5;
     [_islandContainer addSublayer:_liveBadgeLayer];
@@ -143,6 +139,19 @@
     _liveBadgeText.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
     _liveBadgeText.alignmentMode = kCAAlignmentCenter;
     [_liveBadgeLayer addSublayer:_liveBadgeText];
+}
+
+- (void)updateIconImage {
+    if (@available(macOS 11.0, *)) {
+        NSString *symbolName = (_theme == NotchEyeColorThemeRed) ? @"exclamationmark.shield.fill" : @"video.fill";
+        NSImage *img = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil];
+        if (!img) {
+            img = [NSImage imageWithSystemSymbolName:@"video.fill" accessibilityDescription:nil];
+        }
+        if (img) {
+            _iconLayer.contents = [self tintImage:img withColor:[self accentColor]];
+        }
+    }
 }
 
 - (NSImage *)tintImage:(NSImage *)image withColor:(NSColor *)tintColor {
@@ -197,20 +206,20 @@
     CGPathRelease(path);
 
     if (expanded) {
-        // Dot + ring on left
-        _dotLayer.frame = CGRectMake(16, 26, 7, 7);
-        _dotPulseRing.frame = CGRectMake(11.5, 21.5, 16, 16);
-        _iconLayer.frame = CGRectMake(13, 11, 14, 12);
+        // Dot + ring on left (cleanly vertically centered at y=23 in the 54pt capsule)
+        _dotLayer.frame = CGRectMake(16, 23.5, 7, 7);
+        _dotPulseRing.frame = CGRectMake(11.5, 19, 16, 16);
+        _iconLayer.frame = CGRectMake(13, 9, 14, 12);
 
         // Texts in center
-        _titleLayer.frame = CGRectMake(36, 27, 200, 16);
-        _subtitleLayer.frame = CGRectMake(36, 11, 200, 14);
+        _titleLayer.frame = CGRectMake(36, 24, 205, 16);
+        _subtitleLayer.frame = CGRectMake(36, 9, 205, 14);
 
-        // LIVE Badge on right
-        CGFloat badgeW = 34.0;
-        CGFloat badgeH = 16.0;
-        _liveBadgeLayer.frame = CGRectMake(containerWidth - badgeW - 14, 19, badgeW, badgeH);
-        _liveBadgeText.frame = CGRectMake(0, 1.5, badgeW, badgeH);
+        // Badge on right
+        CGFloat badgeW = (_theme == NotchEyeColorThemeRed) ? 46.0 : 38.0;
+        CGFloat badgeH = 17.0;
+        _liveBadgeLayer.frame = CGRectMake(containerWidth - badgeW - 14, 18, badgeW, badgeH);
+        _liveBadgeText.frame = CGRectMake(0, 2.0, badgeW, badgeH);
 
         _dotLayer.opacity = 1.0;
         _iconLayer.opacity = 1.0;
@@ -236,10 +245,22 @@
     [_collapseTimer invalidate];
     _collapseTimer = nil;
 
-    if (appName.length > 0) {
-        _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Session", appName];
+    if (_theme == NotchEyeColorThemeRed) {
+        _titleLayer.string = @"Citrix HDX Pipe";
+        _liveBadgeText.string = @"ALERT";
+        if (appName.length > 0) {
+            _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Remote Redirect", appName];
+        } else {
+            _subtitleLayer.string = @"corp-gateway.internal • VM Pipe";
+        }
     } else {
-        _subtitleLayer.string = @"Citrix HDX Pipe";
+        _titleLayer.string = @"Camera Active";
+        _liveBadgeText.string = @"LIVE";
+        if (appName.length > 0) {
+            _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Active Stream", appName];
+        } else {
+            _subtitleLayer.string = @"Built-in FaceTime HD";
+        }
     }
 
     [self updateTheme:_theme];
@@ -247,7 +268,7 @@
     _isExpanded = YES;
     _isHaloVisible = YES;
 
-    // Spring(0.35s, bounce: 0.12) matching Blueprint Spec
+    // Fluid spring expansion animation
     [CATransaction begin];
     [CATransaction setAnimationDuration:0.35];
     [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
@@ -261,7 +282,7 @@
     // Start 1.2Hz sine wave pulse on dot
     [self startDotPulse];
 
-    // Smoothly retract to 185pt hardware rim after 3.5 seconds
+    // Retract to persistent halo after 3.5 seconds
     __weak typeof(self) weakSelf = self;
     _collapseTimer = [NSTimer scheduledTimerWithTimeInterval:3.5 repeats:NO block:^(NSTimer * _Nonnull timer) {
         [weakSelf collapseToHalo];
@@ -305,7 +326,6 @@
     [_dotLayer removeAllAnimations];
     [_dotPulseRing removeAllAnimations];
 
-    // 1.2Hz Sine pulse
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
     pulse.fromValue = @(1.0);
     pulse.toValue = @(1.25);
@@ -347,12 +367,7 @@
     _liveBadgeLayer.backgroundColor = [color colorWithAlphaComponent:0.18].CGColor;
     _liveBadgeLayer.borderColor = [color colorWithAlphaComponent:0.45].CGColor;
 
-    if (@available(macOS 11.0, *)) {
-        NSImage *camImg = [NSImage imageWithSystemSymbolName:@"video.fill" accessibilityDescription:nil];
-        if (camImg) {
-            _iconLayer.contents = [self tintImage:camImg withColor:color];
-        }
-    }
+    [self updateIconImage];
 }
 
 @end
