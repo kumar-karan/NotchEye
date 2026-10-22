@@ -2,19 +2,25 @@
 #import <QuartzCore/QuartzCore.h>
 
 @interface NotchIslandView () {
-    CALayer *_islandContainer;
-    CAShapeLayer *_haloBorderLayer;
-    CALayer *_dotLayer;
-    CALayer *_dotPulseRing;
+    CAShapeLayer *_backgroundShapeLayer;
+    CAShapeLayer *_haloStrokeLayer;
+    
+    // Left element: circular glyph container
+    CALayer *_iconBadgeLayer;
     CALayer *_iconLayer;
+    CALayer *_statusDotLayer;
+    CALayer *_statusDotPulseLayer;
+
+    // Center typography: SF Pro Display
     CATextLayer *_titleLayer;
     CATextLayer *_subtitleLayer;
-    CALayer *_liveBadgeLayer;
-    CATextLayer *_liveBadgeText;
+
+    // Right element: Apple-style status capsule
+    CALayer *_badgeContainer;
+    CATextLayer *_badgeTextLayer;
 
     NSTimer *_collapseTimer;
     BOOL _isCameraActive;
-    NSRect _notchBaseFrame;
 }
 @end
 
@@ -23,7 +29,7 @@
 - (instancetype)initWithFrame:(NSRect)frameRect {
     self = [super initWithFrame:frameRect];
     if (self) {
-        _theme = NotchEyeColorThemeGreen;
+        _theme = NotchEyeColorThemeRed;
         _isExpanded = NO;
         _isHaloVisible = NO;
         _isCameraActive = NO;
@@ -37,113 +43,107 @@
 - (NSColor *)accentColor {
     switch (_theme) {
         case NotchEyeColorThemeRed:
-            // Alert Ruby P3 #FF3B30
-            return [NSColor colorWithDisplayP3Red:1.0 green:0.231 blue:0.188 alpha:1.0];
+            // Official Apple System Red
+            return [NSColor colorWithDisplayP3Red:1.0 green:0.271 blue:0.227 alpha:1.0]; // #FF453A
         case NotchEyeColorThemeAmber:
-            return [NSColor colorWithDisplayP3Red:1.0 green:0.620 blue:0.040 alpha:1.0];
+            return [NSColor colorWithDisplayP3Red:1.0 green:0.624 blue:0.039 alpha:1.0]; // #FF9F0A
         case NotchEyeColorThemeCyan:
-            // CAD Cyan #38BDF8
-            return [NSColor colorWithDisplayP3Red:0.220 green:0.741 blue:0.973 alpha:1.0];
+            return [NSColor colorWithDisplayP3Red:0.392 green:0.824 blue:1.0 alpha:1.0]; // #64D2FF
         case NotchEyeColorThemeGreen:
         default:
-            // Laser Green P3 #30D158
-            return [NSColor colorWithDisplayP3Red:0.188 green:0.820 blue:0.345 alpha:1.0];
+            // Official Apple System Green
+            return [NSColor colorWithDisplayP3Red:0.196 green:0.843 blue:0.294 alpha:1.0]; // #32D74B
     }
 }
 
 - (void)setupSublayers {
-    // 1. Island Container (Pure OLED hardware black)
-    _islandContainer = [CALayer layer];
-    _islandContainer.backgroundColor = [NSColor colorWithWhite:0.0 alpha:0.99].CGColor;
-    _islandContainer.cornerRadius = 18.0;
-    if (@available(macOS 10.15, *)) {
-        _islandContainer.cornerCurve = kCACornerCurveContinuous;
-    }
-    _islandContainer.masksToBounds = YES;
-    _islandContainer.opacity = 0.0;
-    _islandContainer.borderColor = [NSColor colorWithWhite:1.0 alpha:0.09].CGColor;
-    _islandContainer.borderWidth = 0.5;
-    [self.layer addSublayer:_islandContainer];
+    // 1. Background Shape Layer (Pitch black OLED cutout extension)
+    _backgroundShapeLayer = [CAShapeLayer layer];
+    _backgroundShapeLayer.fillColor = [NSColor colorWithWhite:0.0 alpha:0.98].CGColor;
+    _backgroundShapeLayer.strokeColor = [NSColor colorWithWhite:1.0 alpha:0.12].CGColor;
+    _backgroundShapeLayer.lineWidth = 0.5;
+    _backgroundShapeLayer.opacity = 0.0;
+    [self.layer addSublayer:_backgroundShapeLayer];
 
-    // 2. Halo bottom border (1.5pt Laser Rim matching Blueprint)
-    _haloBorderLayer = [CAShapeLayer layer];
-    _haloBorderLayer.fillColor = [NSColor clearColor].CGColor;
-    _haloBorderLayer.strokeColor = [self accentColor].CGColor;
-    _haloBorderLayer.lineWidth = 1.5;
-    _haloBorderLayer.lineCap = kCALineCapRound;
-    _haloBorderLayer.lineJoin = kCALineJoinRound;
-    _haloBorderLayer.opacity = 0.0;
-    _haloBorderLayer.shadowColor = [self accentColor].CGColor;
-    _haloBorderLayer.shadowRadius = 8.0;
-    _haloBorderLayer.shadowOpacity = 0.75;
-    _haloBorderLayer.shadowOffset = CGSizeMake(0, -2);
-    [self.layer addSublayer:_haloBorderLayer];
+    // 2. Halo Stroke Layer (Continuous border around sides and bottom to top screen edge)
+    _haloStrokeLayer = [CAShapeLayer layer];
+    _haloStrokeLayer.fillColor = [NSColor clearColor].CGColor;
+    _haloStrokeLayer.strokeColor = [self accentColor].CGColor;
+    _haloStrokeLayer.lineWidth = 1.5;
+    _haloStrokeLayer.lineCap = kCALineCapRound;
+    _haloStrokeLayer.lineJoin = kCALineJoinRound;
+    _haloStrokeLayer.opacity = 0.0;
+    _haloStrokeLayer.shadowColor = [self accentColor].CGColor;
+    _haloStrokeLayer.shadowRadius = 8.0;
+    _haloStrokeLayer.shadowOpacity = 0.85;
+    _haloStrokeLayer.shadowOffset = CGSizeMake(0, -1);
+    [self.layer addSublayer:_haloStrokeLayer];
 
-    // 3. Status Dot (Pulsing Indicator Micro-Dot)
-    _dotLayer = [CALayer layer];
-    _dotLayer.backgroundColor = [self accentColor].CGColor;
-    _dotLayer.cornerRadius = 3.5;
-    _dotLayer.shadowColor = [self accentColor].CGColor;
-    _dotLayer.shadowRadius = 6.0;
-    _dotLayer.shadowOpacity = 0.95;
-    _dotLayer.shadowOffset = CGSizeZero;
-    [_islandContainer addSublayer:_dotLayer];
+    // 3. Left: Circular Icon Badge (Apple Dynamic Island style)
+    _iconBadgeLayer = [CALayer layer];
+    _iconBadgeLayer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.16].CGColor;
+    _iconBadgeLayer.cornerRadius = 14.0;
+    _iconBadgeLayer.borderColor = [[self accentColor] colorWithAlphaComponent:0.35].CGColor;
+    _iconBadgeLayer.borderWidth = 0.8;
+    [self.layer addSublayer:_iconBadgeLayer];
 
-    // 4. Dot Pulse Ring (1.2Hz Sine wave animation)
-    _dotPulseRing = [CALayer layer];
-    _dotPulseRing.borderColor = [self accentColor].CGColor;
-    _dotPulseRing.borderWidth = 1.0;
-    _dotPulseRing.cornerRadius = 8.0;
-    _dotPulseRing.opacity = 0.0;
-    [_islandContainer addSublayer:_dotPulseRing];
-
-    // 5. Camera SF Symbol Icon
     _iconLayer = [CALayer layer];
     _iconLayer.contentsGravity = kCAGravityResizeAspect;
-    [self updateIconImage];
-    [_islandContainer addSublayer:_iconLayer];
+    [_iconBadgeLayer addSublayer:_iconLayer];
 
-    // 6. Title Text: "Camera Active" / "Citrix HDX Pipe"
+    // 4. Status Dot + Pulse on the badge
+    _statusDotLayer = [CALayer layer];
+    _statusDotLayer.backgroundColor = [self accentColor].CGColor;
+    _statusDotLayer.cornerRadius = 3.0;
+    _statusDotLayer.shadowColor = [self accentColor].CGColor;
+    _statusDotLayer.shadowRadius = 4.0;
+    _statusDotLayer.shadowOpacity = 1.0;
+    [_iconBadgeLayer addSublayer:_statusDotLayer];
+
+    _statusDotPulseLayer = [CALayer layer];
+    _statusDotPulseLayer.borderColor = [self accentColor].CGColor;
+    _statusDotPulseLayer.borderWidth = 1.0;
+    _statusDotPulseLayer.cornerRadius = 6.0;
+    _statusDotPulseLayer.opacity = 0.0;
+    [_iconBadgeLayer addSublayer:_statusDotPulseLayer];
+
+    // 5. Title Text: SF Pro Display Semibold 12.5pt
     _titleLayer = [CATextLayer layer];
-    _titleLayer.string = @"Camera Active";
-    _titleLayer.font = (__bridge CFTypeRef)[NSFont systemFontOfSize:12.0 weight:NSFontWeightSemibold];
-    _titleLayer.fontSize = 12.0;
+    _titleLayer.font = (__bridge CFTypeRef)[NSFont systemFontOfSize:12.5 weight:NSFontWeightSemibold];
+    _titleLayer.fontSize = 12.5;
     _titleLayer.foregroundColor = [NSColor whiteColor].CGColor;
     _titleLayer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
     _titleLayer.alignmentMode = kCAAlignmentLeft;
-    [_islandContainer addSublayer:_titleLayer];
+    [self.layer addSublayer:_titleLayer];
 
-    // 7. Subtitle Text: "Citrix Viewer • corp-gateway.internal"
+    // 6. Subtitle Text: SF Pro Text Regular 10.5pt (System secondary text)
     _subtitleLayer = [CATextLayer layer];
-    _subtitleLayer.string = @"Citrix Viewer • Session Active";
-    _subtitleLayer.font = (__bridge CFTypeRef)[NSFont monospacedSystemFontOfSize:9.5 weight:NSFontWeightMedium];
-    _subtitleLayer.fontSize = 9.5;
-    _subtitleLayer.foregroundColor = [NSColor colorWithWhite:0.62 alpha:1.0].CGColor;
+    _subtitleLayer.font = (__bridge CFTypeRef)[NSFont systemFontOfSize:10.5 weight:NSFontWeightRegular];
+    _subtitleLayer.fontSize = 10.5;
+    _subtitleLayer.foregroundColor = [NSColor colorWithWhite:0.65 alpha:1.0].CGColor;
     _subtitleLayer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
     _subtitleLayer.alignmentMode = kCAAlignmentLeft;
-    [_islandContainer addSublayer:_subtitleLayer];
+    [self.layer addSublayer:_subtitleLayer];
 
-    // 8. Badge Container + Text (High-contrast technical pill)
-    _liveBadgeLayer = [CALayer layer];
-    _liveBadgeLayer.backgroundColor = [[self accentColor] colorWithAlphaComponent:0.18].CGColor;
-    _liveBadgeLayer.cornerRadius = 5.0;
-    _liveBadgeLayer.borderColor = [[self accentColor] colorWithAlphaComponent:0.45].CGColor;
-    _liveBadgeLayer.borderWidth = 0.5;
-    [_islandContainer addSublayer:_liveBadgeLayer];
+    // 7. Right: Status Badge Capsule (Matching text and border colors!)
+    _badgeContainer = [CALayer layer];
+    _badgeContainer.cornerRadius = 7.0;
+    _badgeContainer.borderWidth = 0.8;
+    [self.layer addSublayer:_badgeContainer];
 
-    _liveBadgeText = [CATextLayer layer];
-    _liveBadgeText.string = @"LIVE";
-    _liveBadgeText.font = (__bridge CFTypeRef)[NSFont monospacedSystemFontOfSize:8.5 weight:NSFontWeightBold];
-    _liveBadgeText.fontSize = 8.5;
-    _liveBadgeText.foregroundColor = [self accentColor].CGColor;
-    _liveBadgeText.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
-    _liveBadgeText.alignmentMode = kCAAlignmentCenter;
-    [_liveBadgeLayer addSublayer:_liveBadgeText];
+    _badgeTextLayer = [CATextLayer layer];
+    _badgeTextLayer.font = (__bridge CFTypeRef)[NSFont systemFontOfSize:9.5 weight:NSFontWeightBold];
+    _badgeTextLayer.fontSize = 9.5;
+    _badgeTextLayer.contentsScale = [[NSScreen mainScreen] backingScaleFactor];
+    _badgeTextLayer.alignmentMode = kCAAlignmentCenter;
+    [_badgeContainer addSublayer:_badgeTextLayer];
+
+    [self updateTheme:_theme];
 }
 
 - (void)updateIconImage {
     if (@available(macOS 11.0, *)) {
-        NSString *symbolName = (_theme == NotchEyeColorThemeRed) ? @"exclamationmark.shield.fill" : @"video.fill";
+        NSString *symbolName = (_theme == NotchEyeColorThemeRed) ? @"video.slash.fill" : @"video.fill";
         NSImage *img = [NSImage imageWithSystemSymbolName:symbolName accessibilityDescription:nil];
         if (!img) {
             img = [NSImage imageWithSystemSymbolName:@"video.fill" accessibilityDescription:nil];
@@ -169,70 +169,109 @@
     [self updateLayoutFramesForExpanded:_isExpanded];
 }
 
+/// Constructs a clean U-shape path anchored directly to the top edge of the screen (y = viewHeight).
+/// @param rect The bounding rectangle of the island.
+/// @param cornerRadius The radius of the bottom corners.
+/// @param isClosed If YES, closes along the top edge for the solid fill. If NO, leaves top open for the glowing border stroke.
+- (CGPathRef)newIslandPathForRect:(CGRect)rect cornerRadius:(CGFloat)radius isClosed:(BOOL)isClosed {
+    CGMutablePathRef path = CGPathCreateMutable();
+    CGFloat left = rect.origin.x;
+    CGFloat right = rect.origin.x + rect.size.width;
+    CGFloat bottom = rect.origin.y;
+    CGFloat top = rect.origin.y + rect.size.height; // Exactly at top of window / screen!
+
+    // Start at top-left screen edge
+    CGPathMoveToPoint(path, NULL, left, top);
+    // Down to bottom-left corner
+    CGPathAddLineToPoint(path, NULL, left, bottom + radius);
+    // Bottom-left curve
+    CGPathAddArcToPoint(path, NULL, left, bottom, left + radius, bottom, radius);
+    // Across bottom
+    CGPathAddLineToPoint(path, NULL, right - radius, bottom);
+    // Bottom-right curve
+    CGPathAddArcToPoint(path, NULL, right, bottom, right, bottom + radius, radius);
+    // Up to top-right screen edge
+    CGPathAddLineToPoint(path, NULL, right, top);
+
+    if (isClosed) {
+        // Close across the top edge
+        CGPathAddLineToPoint(path, NULL, left, top);
+        CGPathCloseSubpath(path);
+    }
+
+    return path;
+}
+
 - (void)updateLayoutFramesForExpanded:(BOOL)expanded {
     CGFloat viewWidth = self.bounds.size.width;
-    CGFloat viewHeight = self.bounds.size.height;
+    CGFloat viewHeight = self.bounds.size.height; // y = viewHeight is the top of the screen
 
-    // Spec geometry:
-    // Base Notch: 185pt width, 32pt height
-    // Expanded Shield: 310pt width, 54pt height
-    CGFloat containerWidth = expanded ? 310.0 : 185.0;
-    CGFloat containerHeight = expanded ? 54.0 : 32.0;
-    CGFloat containerX = (viewWidth - containerWidth) / 2.0;
-    CGFloat containerY = viewHeight - containerHeight;
+    // Expanded: 320pt wide × 62pt tall (drops smoothly 30pt below physical 32pt notch)
+    // Collapsed: 185pt wide × 32pt tall (matches physical notch exactly)
+    CGFloat islandWidth = expanded ? 320.0 : 185.0;
+    CGFloat islandHeight = expanded ? 62.0 : 32.0;
+    CGFloat islandRadius = expanded ? 20.0 : 14.0;
+
+    CGFloat islandX = (viewWidth - islandWidth) / 2.0;
+    CGFloat islandY = viewHeight - islandHeight; // Bottom of the island
+    CGRect islandRect = CGRectMake(islandX, islandY, islandWidth, islandHeight);
 
     [CATransaction begin];
     [CATransaction setDisableActions:YES];
 
-    _islandContainer.frame = CGRectMake(containerX, containerY, containerWidth, containerHeight);
-    _islandContainer.cornerRadius = expanded ? 18.0 : 14.0;
+    // 1. Update background & stroke paths (both anchored to top screen edge y=viewHeight)
+    CGPathRef fillPath = [self newIslandPathForRect:islandRect cornerRadius:islandRadius isClosed:YES];
+    _backgroundShapeLayer.path = fillPath;
+    CGPathRelease(fillPath);
 
-    // Continuous squircle bottom contour path (r=14pt squircle with ear fillets)
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGFloat haloRadius = expanded ? 18.0 : 14.0;
-    CGFloat haloLeft = containerX;
-    CGFloat haloRight = containerX + containerWidth;
-    CGFloat haloBottom = containerY;
-
-    // Stroke along bottom rim
-    CGPathMoveToPoint(path, NULL, haloLeft, containerY + 16);
-    CGPathAddLineToPoint(path, NULL, haloLeft, haloBottom + haloRadius);
-    CGPathAddArcToPoint(path, NULL, haloLeft, haloBottom, haloLeft + haloRadius, haloBottom, haloRadius);
-    CGPathAddLineToPoint(path, NULL, haloRight - haloRadius, haloBottom);
-    CGPathAddArcToPoint(path, NULL, haloRight, haloBottom, haloRight, haloBottom + haloRadius, haloRadius);
-    CGPathAddLineToPoint(path, NULL, haloRight, containerY + 16);
-
-    _haloBorderLayer.path = path;
-    CGPathRelease(path);
+    CGPathRef strokePath = [self newIslandPathForRect:islandRect cornerRadius:islandRadius isClosed:NO];
+    _haloStrokeLayer.path = strokePath;
+    CGPathRelease(strokePath);
 
     if (expanded) {
-        // Dot + ring on left (cleanly vertically centered at y=23 in the 54pt capsule)
-        _dotLayer.frame = CGRectMake(16, 23.5, 7, 7);
-        _dotPulseRing.frame = CGRectMake(11.5, 19, 16, 16);
-        _iconLayer.frame = CGRectMake(13, 9, 14, 12);
+        // Vertical layout inside the dropdown portion:
+        // The bottom portion extends from y = islandY (30pt below notch) to y = islandY + 30.
+        CGFloat contentCenterY = islandY + 16.0;
 
-        // Texts in center
-        _titleLayer.frame = CGRectMake(36, 24, 205, 16);
-        _subtitleLayer.frame = CGRectMake(36, 9, 205, 14);
+        // Left Icon Badge (28x28 pt circle)
+        CGFloat badgeSize = 28.0;
+        CGFloat badgeX = islandX + 16.0;
+        CGFloat badgeY = contentCenterY - (badgeSize / 2.0);
+        _iconBadgeLayer.frame = CGRectMake(badgeX, badgeY, badgeSize, badgeSize);
 
-        // Badge on right
-        CGFloat badgeW = (_theme == NotchEyeColorThemeRed) ? 46.0 : 38.0;
-        CGFloat badgeH = 17.0;
-        _liveBadgeLayer.frame = CGRectMake(containerWidth - badgeW - 14, 18, badgeW, badgeH);
-        _liveBadgeText.frame = CGRectMake(0, 2.0, badgeW, badgeH);
+        // Icon inside badge (14x14 pt)
+        _iconLayer.frame = CGRectMake((badgeSize - 14.0) / 2.0, (badgeSize - 14.0) / 2.0, 14.0, 14.0);
 
-        _dotLayer.opacity = 1.0;
-        _iconLayer.opacity = 1.0;
+        // Tiny status dot at top-right of badge
+        _statusDotLayer.frame = CGRectMake(badgeSize - 7.0, badgeSize - 7.0, 6.0, 6.0);
+        _statusDotPulseLayer.frame = CGRectMake(badgeSize - 10.0, badgeSize - 10.0, 12.0, 12.0);
+
+        // Center Typography
+        CGFloat textX = badgeX + badgeSize + 12.0;
+        CGFloat textWidth = islandWidth - (badgeSize + 16.0 + 12.0) - 70.0;
+        
+        _titleLayer.frame = CGRectMake(textX, contentCenterY + 1.0, textWidth, 16.0);
+        _subtitleLayer.frame = CGRectMake(textX, contentCenterY - 14.0, textWidth, 14.0);
+
+        // Right Status Pill (Capsule badge)
+        CGFloat pillW = (_theme == NotchEyeColorThemeRed) ? 52.0 : 44.0;
+        CGFloat pillH = 20.0;
+        CGFloat pillX = islandX + islandWidth - pillW - 16.0;
+        CGFloat pillY = contentCenterY - (pillH / 2.0);
+        _badgeContainer.frame = CGRectMake(pillX, pillY, pillW, pillH);
+        _badgeTextLayer.frame = CGRectMake(0, 3.5, pillW, 14.0);
+
+        // Opacity of content elements
+        _iconBadgeLayer.opacity = 1.0;
         _titleLayer.opacity = 1.0;
         _subtitleLayer.opacity = 1.0;
-        _liveBadgeLayer.opacity = 1.0;
+        _badgeContainer.opacity = 1.0;
     } else {
-        // Collapsed mode: purely strokes the physical notch perimeter
-        _dotLayer.opacity = 0.0;
-        _iconLayer.opacity = 0.0;
+        // Collapsed mode: only the glowing halo stroke remains
+        _iconBadgeLayer.opacity = 0.0;
         _titleLayer.opacity = 0.0;
         _subtitleLayer.opacity = 0.0;
-        _liveBadgeLayer.opacity = 0.0;
+        _badgeContainer.opacity = 0.0;
     }
 
     [CATransaction commit];
@@ -246,21 +285,14 @@
     _collapseTimer = nil;
 
     if (_theme == NotchEyeColorThemeRed) {
-        _titleLayer.string = @"Citrix HDX Pipe";
-        _liveBadgeText.string = @"ALERT";
-        if (appName.length > 0) {
-            _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Remote Redirect", appName];
-        } else {
-            _subtitleLayer.string = @"corp-gateway.internal • VM Pipe";
-        }
+        _titleLayer.string = @"Citrix Camera Active";
+        _subtitleLayer.string = @"Remote VM Redirection • Unmuted";
+        _badgeTextLayer.string = @"ALERT";
     } else {
         _titleLayer.string = @"Camera Active";
-        _liveBadgeText.string = @"LIVE";
-        if (appName.length > 0) {
-            _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Active Stream", appName];
-        } else {
-            _subtitleLayer.string = @"Built-in FaceTime HD";
-        }
+        NSString *displayApp = (appName.length > 0) ? appName : @"FaceTime HD Camera";
+        _subtitleLayer.string = [NSString stringWithFormat:@"%@ • Active", displayApp];
+        _badgeTextLayer.string = @"LIVE";
     }
 
     [self updateTheme:_theme];
@@ -270,21 +302,20 @@
 
     // Fluid spring expansion animation
     [CATransaction begin];
-    [CATransaction setAnimationDuration:0.35];
+    [CATransaction setAnimationDuration:0.38];
     [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]];
 
-    _islandContainer.opacity = 1.0;
-    _haloBorderLayer.opacity = 1.0;
+    _backgroundShapeLayer.opacity = 1.0;
+    _haloStrokeLayer.opacity = 1.0;
     [self updateLayoutFramesForExpanded:YES];
 
     [CATransaction commit];
 
-    // Start 1.2Hz sine wave pulse on dot
-    [self startDotPulse];
+    [self startPulseAnimation];
 
-    // Retract to persistent halo after 3.5 seconds
+    // Retract to persistent notch halo after 3.8 seconds
     __weak typeof(self) weakSelf = self;
-    _collapseTimer = [NSTimer scheduledTimerWithTimeInterval:3.5 repeats:NO block:^(NSTimer * _Nonnull timer) {
+    _collapseTimer = [NSTimer scheduledTimerWithTimeInterval:3.8 repeats:NO block:^(NSTimer * _Nonnull timer) {
         [weakSelf collapseToHalo];
     }];
 }
@@ -294,13 +325,13 @@
     _isExpanded = NO;
 
     [CATransaction begin];
-    [CATransaction setAnimationDuration:0.32];
+    [CATransaction setAnimationDuration:0.35];
     [CATransaction setAnimationTimingFunction:[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]];
 
-    // Retract container, keep continuous laser stroke glowing along notch bezel
+    // Retract background, keep stroke glowing along notch bezel
     [self updateLayoutFramesForExpanded:NO];
-    _islandContainer.opacity = 0.0;
-    _haloBorderLayer.opacity = 1.0;
+    _backgroundShapeLayer.opacity = 0.0;
+    _haloStrokeLayer.opacity = 1.0;
 
     [CATransaction commit];
 }
@@ -314,58 +345,68 @@
 
     [CATransaction begin];
     [CATransaction setAnimationDuration:0.25];
-    _islandContainer.opacity = 0.0;
-    _haloBorderLayer.opacity = 0.0;
+    _backgroundShapeLayer.opacity = 0.0;
+    _haloStrokeLayer.opacity = 0.0;
+    [self updateLayoutFramesForExpanded:NO];
     [CATransaction commit];
 
-    [_dotLayer removeAllAnimations];
-    [_dotPulseRing removeAllAnimations];
+    [_statusDotLayer removeAllAnimations];
+    [_statusDotPulseLayer removeAllAnimations];
 }
 
-- (void)startDotPulse {
-    [_dotLayer removeAllAnimations];
-    [_dotPulseRing removeAllAnimations];
+- (void)startPulseAnimation {
+    [_statusDotLayer removeAllAnimations];
+    [_statusDotPulseLayer removeAllAnimations];
 
+    // Smooth subtle breathing pulse on status dot
     CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
     pulse.fromValue = @(1.0);
-    pulse.toValue = @(1.25);
-    pulse.duration = 0.83; // ~1.2 Hz
+    pulse.toValue = @(1.3);
+    pulse.duration = 0.8;
     pulse.autoreverses = YES;
     pulse.repeatCount = HUGE_VALF;
     pulse.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [_dotLayer addAnimation:pulse forKey:@"pulse"];
+    [_statusDotLayer addAnimation:pulse forKey:@"dotPulse"];
 
     CABasicAnimation *ringScale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-    ringScale.fromValue = @(0.85);
-    ringScale.toValue = @(1.55);
-    ringScale.duration = 1.66;
+    ringScale.fromValue = @(0.8);
+    ringScale.toValue = @(1.8);
+    ringScale.duration = 1.6;
     ringScale.repeatCount = HUGE_VALF;
 
     CABasicAnimation *ringFade = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    ringFade.fromValue = @(0.75);
+    ringFade.fromValue = @(0.8);
     ringFade.toValue = @(0.0);
-    ringFade.duration = 1.66;
+    ringFade.duration = 1.6;
     ringFade.repeatCount = HUGE_VALF;
 
     CAAnimationGroup *group = [CAAnimationGroup animation];
     group.animations = @[ringScale, ringFade];
-    group.duration = 1.66;
+    group.duration = 1.6;
     group.repeatCount = HUGE_VALF;
-    [_dotPulseRing addAnimation:group forKey:@"ring"];
+    [_statusDotPulseLayer addAnimation:group forKey:@"ringPulse"];
 }
 
 - (void)updateTheme:(NotchEyeColorTheme)theme {
     _theme = theme;
     NSColor *color = [self accentColor];
 
-    _haloBorderLayer.strokeColor = color.CGColor;
-    _haloBorderLayer.shadowColor = color.CGColor;
-    _dotLayer.backgroundColor = color.CGColor;
-    _dotLayer.shadowColor = color.CGColor;
-    _dotPulseRing.borderColor = color.CGColor;
-    _liveBadgeText.foregroundColor = color.CGColor;
-    _liveBadgeLayer.backgroundColor = [color colorWithAlphaComponent:0.18].CGColor;
-    _liveBadgeLayer.borderColor = [color colorWithAlphaComponent:0.45].CGColor;
+    _haloStrokeLayer.strokeColor = color.CGColor;
+    _haloStrokeLayer.shadowColor = color.CGColor;
+    _iconBadgeLayer.backgroundColor = [color colorWithAlphaComponent:0.16].CGColor;
+    _iconBadgeLayer.borderColor = [color colorWithAlphaComponent:0.35].CGColor;
+    _statusDotLayer.backgroundColor = color.CGColor;
+    _statusDotLayer.shadowColor = color.CGColor;
+    _statusDotPulseLayer.borderColor = color.CGColor;
+
+    // Badge styling: matching accent color on both background tint and text!
+    _badgeContainer.backgroundColor = [color colorWithAlphaComponent:0.18].CGColor;
+    _badgeContainer.borderColor = [color colorWithAlphaComponent:0.45].CGColor;
+    _badgeTextLayer.foregroundColor = color.CGColor;
+
+    [_badgeTextLayer setNeedsDisplay];
+    [_titleLayer setNeedsDisplay];
+    [_subtitleLayer setNeedsDisplay];
 
     [self updateIconImage];
 }
